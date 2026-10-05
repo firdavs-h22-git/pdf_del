@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>PDF betlarini o'chirish</title>
+<style>
+:root{--bg:#f3f5f2;--card:#fff;--ink:#17201b;--mute:#5d6b62;--line:#d5ddd7;--acc:#1f6f54;--accInk:#fff;--bad:#b3261e;
+box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#121815;--card:#1b2420;--ink:#e8efe9;--mute:#9aa9a0;--line:#2f3b35;--acc:#5fc19b;--accInk:#0c1511;--bad:#ff8a80}}
+:root[data-theme="dark"]{--bg:#121815;--card:#1b2420;--ink:#e8efe9;--mute:#9aa9a0;--line:#2f3b35;--acc:#5fc19b;--accInk:#0c1511;--bad:#ff8a80}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 "Source Sans 3",system-ui,-apple-system,"Segoe UI",sans-serif}
+main{max-width:640px;margin:0 auto;padding:20px 16px 40px}
+h1{font-size:1.6rem;line-height:1.2;margin:8px 0 6px;letter-spacing:-.01em}
+p.lead{color:var(--mute);margin:0 0 18px}
+#drop{border:2px dashed var(--line);border-radius:12px;background:var(--card);padding:28px 16px;text-align:center;cursor:pointer}
+#drop.over{border-color:var(--acc)}
+#drop b{display:block;font-size:1.05rem}
+#drop span{color:var(--mute);font-size:.9rem}
+.global{margin:16px 0;padding:14px;background:var(--card);border:1px solid var(--line);border-radius:12px}
+.global label{font-weight:600;display:block;margin-bottom:6px}
+.row{display:flex;gap:8px;flex-wrap:wrap}
+input[type=text]{flex:1;min-width:140px;padding:10px 12px;font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:8px}
+input[type=text]:focus,button:focus-visible{outline:2px solid var(--acc);outline-offset:1px}
+button{font:inherit;font-weight:600;padding:10px 14px;border-radius:8px;border:1px solid var(--acc);background:var(--acc);color:var(--accInk);cursor:pointer}
+button.ghost{background:transparent;color:var(--acc)}
+button:disabled{opacity:.5;cursor:default}
+.hint{color:var(--mute);font-size:.85rem;margin:6px 0 0}
+.file{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px;margin:10px 0}
+.file h3{margin:0 0 2px;font-size:1rem;word-break:break-all}
+.meta{color:var(--mute);font-size:.88rem;margin-bottom:10px}
+.msg{font-size:.88rem;margin-top:8px}
+.msg.err{color:var(--bad)}
+.top{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:18px}
+</style>
+</head>
+<body>
+<main>
+<h1>PDF betlarini o'chirish</h1>
+<p class="lead">Muqova, kirish yoki istalgan betni olib tashlang. Fayllar qurilmangizdan chiqmaydi.</p>
+
+<div id="drop" tabindex="0" role="button">
+  <b>PDF fayllarni tanlang</b>
+  <span>bir nechta faylni birdan tanlash mumkin</span>
+  <input id="inp" type="file" accept="application/pdf" multiple hidden>
+</div>
+
+<div id="tools" hidden>
+  <div class="global">
+    <label for="all">Hamma fayllarga bir xil betlar</label>
+    <div class="row">
+      <input id="all" type="text" placeholder="Masalan: 1-3, 5">
+      <button class="ghost" id="apply">Qo'llash</button>
+    </div>
+    <p class="hint">Raqamlar vergul bilan, oraliq chiziqcha bilan: 1-3, 7, 10-12. Har bir faylga alohida ham yozishingiz mumkin.</p>
+  </div>
+  <div id="list"></div>
+  <div class="top">
+    <span class="meta" id="count"></span>
+    <button id="dlAll">Hammasini yuklab olish</button>
+  </div>
+</div>
+</main>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+<script>
+const files=[];
+const $=id=>document.getElementById(id);
+const drop=$('drop'),inp=$('inp');
+drop.onclick=()=>inp.click();
+drop.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();inp.click()}};
+drop.ondragover=e=>{e.preventDefault();drop.classList.add('over')};
+drop.ondragleave=()=>drop.classList.remove('over');
+drop.ondrop=e=>{e.preventDefault();drop.classList.remove('over');add(e.dataTransfer.files)};
+inp.onchange=()=>{add(inp.files);inp.value=''};
+
+async function add(fl){
+  for(const f of fl){
+    if(!/pdf$/i.test(f.type)&&!/\.pdf$/i.test(f.name))continue;
+    try{
+      const buf=await f.arrayBuffer();
+      const doc=await PDFLib.PDFDocument.load(buf,{ignoreEncryption:true});
+      files.push({name:f.name,buf,pages:doc.getPageCount(),spec:''});
+    }catch(e){
+      files.push({name:f.name,buf:null,pages:0,spec:'',err:"Faylni o'qib bo'lmadi (buzilgan yoki parolli)."});
+    }
+  }
+  render();
+}
+
+function parse(spec,n){
+  const set=new Set();
+  for(const part of spec.split(/[,;\s]+/).filter(Boolean)){
+    const m=part.match(/^(\d+)(?:-(\d+))?$/);
+    if(!m)throw new Error('Noto\'g\'ri yozuv: "'+part+'"');
+    let a=+m[1],b=m[2]?+m[2]:a;
+    if(a>b)[a,b]=[b,a];
+    if(a<1||b>n)throw new Error('Bet raqami 1 dan '+n+' gacha bo\'lishi kerak');
+    for(let i=a;i<=b;i++)set.add(i-1);
+  }
+  return set;
+}
+
+async function build(f){
+  const rm=parse(f.spec,f.pages);
+  if(!rm.size)throw new Error("O'chiriladigan betlarni yozing");
+  if(rm.size>=f.pages)throw new Error("Hamma betni o'chirib bo'lmaydi");
+  const doc=await PDFLib.PDFDocument.load(f.buf,{ignoreEncryption:true});
+  [...rm].sort((a,b)=>b-a).forEach(i=>doc.removePage(i));
+  return new Blob([await doc.save()],{type:'application/pdf'});
+}
+
+function save(blob,name){
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download=name.replace(/\.pdf$/i,'')+'_tozalangan.pdf';
+  document.body.appendChild(a);a.click();a.remove();
+  setTimeout(()=>URL.revokeObjectURL(a.href),4000);
+}
+
+function render(){
+  $('tools').hidden=!files.length;
+  $('count').textContent=files.length+' ta fayl';
+  const list=$('list');list.innerHTML='';
+  files.forEach((f,i)=>{
+    const d=document.createElement('div');d.className='file';
+    const h=document.createElement('h3');h.textContent=f.name;
+    const m=document.createElement('div');m.className='meta';
+    m.textContent=f.err?'':f.pages+' bet';
+    d.append(h,m);
+    const msg=document.createElement('div');msg.className='msg';
+    if(f.err){msg.classList.add('err');msg.textContent=f.err}
+    else{
+      const row=document.createElement('div');row.className='row';
+      const t=document.createElement('input');t.type='text';t.value=f.spec;
+      t.placeholder="O'chiriladigan betlar: 1-3";
+      t.setAttribute('aria-label',f.name+' uchun betlar');
+      t.oninput=()=>f.spec=t.value;
+      const b=document.createElement('button');b.textContent='Yuklab olish';
+      b.onclick=async()=>{
+        msg.className='msg';msg.textContent='';
+        try{save(await build(f),f.name)}catch(e){msg.classList.add('err');msg.textContent=e.message}
+      };
+      const x=document.createElement('button');x.className='ghost';x.textContent='Olib tashlash';
+      x.onclick=()=>{files.splice(i,1);render()};
+      row.append(t,b,x);d.append(row);
+    }
+    d.append(msg);list.append(d);
+  });
+}
+
+$('apply').onclick=()=>{
+  const v=$('all').value;
+  files.forEach(f=>f.spec=v);render();
+};
+$('dlAll').onclick=async()=>{
+  const btn=$('dlAll');btn.disabled=true;
+  const msgs=document.querySelectorAll('.file .msg');
+  for(let i=0;i<files.length;i++){
+    const f=files[i];if(f.err)continue;
+    try{save(await build(f),f.name);msgs[i].textContent=''}
+    catch(e){msgs[i].className='msg err';msgs[i].textContent=e.message}
+    await new Promise(r=>setTimeout(r,350));
+  }
+  btn.disabled=false;
+};
+</script>
+</body>
+</html>
