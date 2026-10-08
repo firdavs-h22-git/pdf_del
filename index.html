@@ -34,6 +34,11 @@ button:disabled{opacity:.5;cursor:default}
 .msg{font-size:.88rem;margin-top:8px}
 .msg.err{color:var(--bad)}
 .top{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:18px}
+.donate{margin-top:28px;padding:14px;background:var(--card);border:1px solid var(--line);border-radius:12px}
+.donate h2{font-size:1.05rem;margin:0 0 4px}
+.donate p{color:var(--mute);font-size:.9rem;margin:0 0 10px}
+.donate .num{font-size:1.15rem;font-weight:600;letter-spacing:.04em;word-break:break-all}
+.donate .own{color:var(--mute);font-size:.9rem;margin:2px 0 10px}
 </style>
 </head>
 <body>
@@ -61,6 +66,15 @@ button:disabled{opacity:.5;cursor:default}
     <span class="meta" id="count"></span>
     <button id="dlAll">Hammasini yuklab olish</button>
   </div>
+</div>
+
+<div class="donate">
+  <h2>Loyihani qo'llab-quvvatlash</h2>
+  <p>Sayt foydali bo'lsa, xohlagan miqdorda hissa qo'shishingiz mumkin.</p>
+  <div class="num" id="card">8600 0000 0000 0000</div>
+  <div class="own">ISM FAMILIYA</div>
+  <button class="ghost" id="copyCard">Karta raqamini nusxalash</button>
+  <div class="msg" id="copyMsg"></div>
 </div>
 </main>
 
@@ -165,6 +179,11 @@ $('dlAll').onclick=async()=>{
     await new Promise(r=>setTimeout(r,350));
   }
   btn.disabled=false;
+};
+$('copyCard').onclick=async()=>{
+  const n=$('card').textContent.replace(/\s+/g,'');
+  try{await navigator.clipboard.writeText(n);$('copyMsg').textContent='Nusxalandi'}
+  catch(e){$('copyMsg').textContent="Nusxalab bo'lmadi, raqamni qo'lda belgilang"}
 };
 </script>
 </body>
